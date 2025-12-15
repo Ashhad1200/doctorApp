@@ -1,16 +1,10 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, Alert, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { isValidFutureDate } from '../utils/validation';
-
-const timeSlots = [
-  '09:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
-  '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM',
-];
 
 const BookingScreen = () => {
   const navigation = useNavigation<any>();
@@ -18,44 +12,43 @@ const BookingScreen = () => {
   const { doctor } = route.params || {};
 
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [selectedTime, setSelectedTime] = useState('');
+  const [selectedTime, setSelectedTime] = useState<string | null>(null);
+  const [dates, setDates] = useState<Date[]>([]);
 
-  // Generate next 14 days (excluding past dates)
-  const generateDates = () => {
-    const dates = [];
+  useEffect(() => {
+    // Generate next 14 days
+    const nextDays = [];
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
 
-    for (let i = 0; i < 14; i++) {
+    for (let i = 1; i <= 14; i++) {
       const date = new Date(today);
       date.setDate(today.getDate() + i);
-      dates.push(date);
+      nextDays.push(date);
     }
-    return dates;
-  };
+    setDates(nextDays);
+  }, []);
 
-  const dates = generateDates();
+  const timeSlots = [
+    '09:00 AM', '09:30 AM', '10:00 AM', '10:30 AM',
+    '11:00 AM', '11:30 AM', '02:00 PM', '02:30 PM',
+    '03:00 PM', '03:30 PM', '04:00 PM', '04:30 PM',
+  ];
 
-  const handleDateSelect = (date: Date) => {
-    // Validate date is not in the past
-    if (!isValidFutureDate(date)) {
-      Alert.alert('Invalid Date', 'Please select a future date');
-      return;
-    }
-    setSelectedDate(date);
+  const getDayName = (date: Date) => {
+    return date.toLocaleDateString('en-US', { weekday: 'short' });
   };
 
   const formatDate = (date: Date) => {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
-  const getDayName = (date: Date) => {
-    return date.toLocaleDateString('en-US', { weekday: 'short' });
-  };
-
-  const isToday = (date: Date) => {
-    const today = new Date();
-    return date.toDateString() === today.toDateString();
+  const handleDateSelect = (date: Date) => {
+    if (!isValidFutureDate(date)) {
+      Alert.alert('Invalid Date', 'Please select a future date');
+      return;
+    }
+    setSelectedDate(date);
+    setSelectedTime(null); // Reset time when date changes
   };
 
   const handleContinue = () => {
@@ -65,10 +58,23 @@ const BookingScreen = () => {
     }
 
     if (!selectedTime) {
-      time: selectedTime,
-    };
+      Alert.alert('Select Time', 'Please select a time slot');
+      return;
+    }
 
-    navigation.navigate('Checkout', { bookingData });
+    // Double-check date is still valid (edge case: user selected near midnight)
+    if (!isValidFutureDate(selectedDate)) {
+      Alert.alert('Invalid Date', 'The selected date is no longer valid. Please select another date.');
+      return;
+    }
+
+    navigation.navigate('Checkout', {
+      bookingData: {
+        doctor,
+        date: selectedDate.toISOString(),
+        time: selectedTime,
+      },
+    });
   };
 
   if (!doctor) {
@@ -96,18 +102,18 @@ const BookingScreen = () => {
         <View className="px-6 mb-6">
           <Text className="text-lg font-bold text-text mb-3">Select Date</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {getNextDays().map((date, index) => {
-              const isSelected = date.toDateString() === selectedDate.toDateString();
+            {dates.map((date, index) => {
+              const isSelected = selectedDate ? date.toDateString() === selectedDate.toDateString() : false;
               return (
                 <TouchableOpacity
                   key={index}
-                  onPress={() => setSelectedDate(date)}
+                  onPress={() => handleDateSelect(date)}
                   className={`mr-3 p-4 rounded-xl items-center ${isSelected ? 'bg-primary' : 'bg-white'
                     }`}
                   style={{ width: 80 }}
                 >
                   <Text className={`text-xs ${isSelected ? 'text-white' : 'text-muted'}`}>
-                    {formatDay(date)}
+                    {getDayName(date)}
                   </Text>
                   <Text className={`text-lg font-bold mt-1 ${isSelected ? 'text-white' : 'text-text'}`}>
                     {date.getDate()}
@@ -126,15 +132,20 @@ const BookingScreen = () => {
           <Text className="text-lg font-bold text-text mb-3">Select Time</Text>
           <View className="flex-row flex-wrap">
             {timeSlots.map((time, index) => {
-              const isSelected = time === selectedTime;
+              const isSelected = selectedTime === time;
               return (
                 <TouchableOpacity
                   key={index}
                   onPress={() => setSelectedTime(time)}
-                  className={`mr-3 mb-3 px-4 py-3 rounded-lg ${isSelected ? 'bg-primary' : 'bg-white'
+                  className={`mr-3 mb-3 px-6 py-3 rounded-full border ${isSelected
+                      ? 'bg-primary border-primary'
+                      : 'bg-white border-gray-200'
                     }`}
                 >
-                  <Text className={`font-semibold ${isSelected ? 'text-white' : 'text-text'}`}>
+                  <Text
+                    className={`${isSelected ? 'text-white font-bold' : 'text-text'
+                      }`}
+                  >
                     {time}
                   </Text>
                 </TouchableOpacity>
@@ -144,12 +155,12 @@ const BookingScreen = () => {
         </View>
       </ScrollView>
 
-      {/* Fixed Bottom Button */}
-      <View className="absolute bottom-0 left-0 right-0 bg-white p-6 border-t border-gray-200">
+      {/* Footer */}
+      <View className="absolute bottom-0 left-0 right-0 p-6 bg-white border-t border-gray-100">
         <Button
-          title="Continue to Payment"
+          title="Continue to Checkout"
           onPress={handleContinue}
-          className="w-full"
+          disabled={!selectedDate || !selectedTime}
         />
       </View>
     </SafeAreaView>
